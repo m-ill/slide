@@ -26,5 +26,8 @@ export default defineConfig({
     headers: {
       'Content-Type': 'application/javascript'
     }
+  },
+  define: {
+    'process.env': {}
   }
 });
