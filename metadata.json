@@ -1,0 +1,6 @@
+{
+  "name": "S-Slide: AI 프레젠테이션 생성기",
+  "description": "텍스트 콘텐츠 업로드 또는 사용자 정의 개요를 통해 프레젠테이션을 생성하는 AI 기반 웹 애플리케이션입니다. 사용자는 개요를 편집하고, 슬라이드를 미리 보고, HTML 형식으로 내보낼 수 있습니다. 콘텐츠 생성에는 Google Gemini API를 활용합니다.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

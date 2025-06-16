@@ -1,0 +1,336 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>S-Slide: AI 프레젠테이션 생성기</title>
+    <script src="https://cdn.tailwindcss.com/3.4.0"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- MathJax -->
+    <script>
+      MathJax = {
+        tex: {
+          inlineMath: [['\\(', '\\)']],
+          displayMath: [['$$', '$$']],
+          processEscapes: true
+        },
+        svg: {
+          fontCache: 'global'
+        },
+        startup: {
+          ready: () => {
+            MathJax.startup.defaultReady();
+            MathJax.startup.promise.then(() => {
+              console.log('MathJax PAI 초기화 완료');
+            });
+          }
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" crossorigin="anonymous"></script>
+
+    <!-- D3.js (Dependency for Markmap, potentially useful for Mermaid) -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" crossorigin="anonymous"></script>
+
+    <!-- Mermaid.js -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" crossorigin="anonymous"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+
+    <!-- Markmap -->
+    <script src="https://unpkg.com/markmap-lib@0.16.2/dist/browser/index.js"></script>
+    <script src="https://unpkg.com/markmap-view@0.16.2/dist/browser/index.js"></script>
+
+    <!-- DOMPurify for XSS prevention -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js" crossorigin="anonymous"></script>
+
+    <style>
+      body {
+        font-family: 'Noto Sans KR', sans-serif;
+        color: #333333; /* Body Text */
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #E0D8CD; /* Info Section Border (lighter shade for track) */
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #777777; /* Helper Text/Date color */
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555555; /* Quote Text color */
+      }
+      /* Prose adjustments */
+      .prose {
+        max-width: 100% !important; 
+        color: #333333;
+      }
+      .prose strong {
+        color: #000000;
+      }
+      .prose a {
+        color: #E60012;
+      }
+      .prose blockquote {
+        color: #555555;
+        border-left-color: #C9BFB5;
+      }
+      .prose code {
+         color: #333333;
+         background-color: #FAF6F0; /* Info Section Background */
+         padding: 0.1em 0.3em;
+         border-radius: 0.25rem;
+      }
+      .prose pre {
+        background-color: #f8f8f8; /* Original Text Area Background */
+        color: #333333;
+        border: 1px solid #E0D8CD; /* Info Section Border */
+      }
+      .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+        color: #333333;
+        margin-top: 1.25em;
+        margin-bottom: 0.5em;
+      }
+      .prose p {
+        margin-top: 0.5em;
+        margin-bottom: 0.5em;
+      }
+      .prose ul, .prose ol {
+        margin-top: 0.5em;
+        margin-bottom: 0.5em;
+        padding-left: 1.5em;
+      }
+      .prose li > p { 
+        margin-top: 0.25em;
+        margin-bottom: 0.25em;
+      }
+      
+      /* Styling for the 4:3 preview container */
+      .slide-preview-container-4-3 {
+        width: 100%;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        background-color: #333333; /* Body Text (Dark background for container) */
+        border: 1px solid #555555; /* Quote text (darker border) */
+        border-radius: 0.375rem; 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        padding-top: 75%; /* 4:3 Aspect Ratio */
+        position: relative;
+        overflow: hidden;
+      }
+      .slide-preview-content-4-3 {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        transform-origin: top left;
+      }
+
+      /* Base styles for AI HTML in preview */
+      .slide-preview-content-4-3 h1, 
+      .slide-preview-content-4-3 h2,
+      .slide-preview-content-4-3 p,
+      .slide-preview-content-4-3 ul,
+      .slide-preview-content-4-3 li {
+        font-family: 'Noto Sans KR', sans-serif;
+        color: #333333; /* Default text color */
+      }
+      .slide-preview-content-4-3 strong {
+        color: #000000; /* Strong text */
+      }
+      .slide-preview-content-4-3 a {
+        color: #E60012; /* Primary accent */
+      }
+      .mermaid svg { /* Ensure mermaid diagrams scale well */
+        max-width: 100%;
+        height: auto;
+      }
+      .markmap svg { /* Ensure markmap diagrams scale well */
+        width: 100% !important; /* Override default inline style from markmap */
+        height: 100% !important; /* Override default inline style from markmap */
+      }
+      /* Chart canvas container for responsive charts */
+      .chart-canvas-container {
+        position: relative;
+        width: 95%; /* Adjust as needed */
+        height: 90%; /* Adjust as needed */
+        margin: auto;
+      }
+
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1",
+    "@google/genai": "https://esm.sh/@google/genai@0.15.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-[#F3E9DD]">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+
+    <script>
+      // Global function to render dynamic content
+      window.mermaidInitialized = false; // Flag to ensure mermaid is initialized only once
+
+      window.renderDynamicContent = function() {
+        // MathJax: Tell it to look for new math to typeset
+        if (window.MathJax && window.MathJax.typeset) {
+          try {
+            window.MathJax.typeset();
+          } catch (e) {
+            console.error('MathJax typesetting error:', e);
+          }
+        }
+
+        // Mermaid: Find and render all mermaid divs
+        if (window.mermaid) {
+          try {
+            if (!window.mermaidInitialized) {
+              window.mermaid.initialize({ startOnLoad: false, theme: 'neutral' }); // Initialize once
+              window.mermaidInitialized = true;
+              console.log('Mermaid initialized.');
+            }
+            
+            const mermaidElements = document.querySelectorAll('div.mermaid:not([data-processed="true"])');
+            mermaidElements.forEach((el, i) => {
+              const uniqueId = 'mermaid-diag-' + Date.now() + '-' + i;
+              const mermaidCode = el.textContent ? el.textContent.trim() : '';
+
+              if (mermaidCode) {
+                try {
+                  // Clear previous content and render if not already an SVG
+                  if (!el.querySelector('svg')) {
+                    el.innerHTML = ''; // Clear the text content
+                    el.setAttribute('data-mermaid-id', uniqueId);
+                    
+                    // Use mermaid.render to get SVG code and then set it
+                    window.mermaid.render(uniqueId, mermaidCode, (svgCode) => {
+                      el.innerHTML = svgCode;
+                      el.setAttribute('data-processed', 'true');
+                    });
+                  } else {
+                     el.setAttribute('data-processed', 'true'); // Already has SVG, mark as processed
+                  }
+                } catch (e) {
+                  console.error('Error rendering individual Mermaid diagram:', e, mermaidCode);
+                  el.innerHTML = '<p style="color:red; font-size:12px;">Mermaid Error: ' + e.message.substring(0,100) + '</p>';
+                  el.setAttribute('data-processed', 'true');
+                }
+              } else {
+                 el.setAttribute('data-processed', 'true'); // Empty, mark as processed
+              }
+            });
+          } catch (e) {
+            console.error('Error processing Mermaid diagrams:', e);
+          }
+        }
+
+        // Chart.js: Find pre.chart-json, parse, and render
+        if (window.Chart) {
+          document.querySelectorAll('pre.chart-json:not([data-chart-processed="true"])').forEach((preElement, index) => {
+            const codeElement = preElement.querySelector('code');
+            if (codeElement && codeElement.textContent) {
+              try {
+                const chartJsonString = codeElement.textContent;
+                const chartConfig = JSON.parse(chartJsonString);
+                
+                let canvasElement = preElement.previousElementSibling;
+                if (!canvasElement || canvasElement.tagName !== 'CANVAS' || !canvasElement.classList.contains('chart-canvas')) {
+                    let chartContainer = null;
+                    if (preElement.parentElement.classList.contains('slide-preview-content-4-3')) { 
+                        const potentialContainers = Array.from(preElement.parentElement.children).filter(child => child.querySelector('canvas.chart-canvas'));
+                        if (potentialContainers.length > 0) {
+                            canvasElement = potentialContainers[0].querySelector('canvas.chart-canvas');
+                        } else {
+                            chartContainer = document.createElement('div');
+                            chartContainer.className = 'chart-canvas-container';
+                            canvasElement = document.createElement('canvas');
+                            canvasElement.className = 'chart-canvas';
+                            chartContainer.appendChild(canvasElement);
+                            preElement.parentNode.insertBefore(chartContainer, preElement);
+                        }
+                    } else { 
+                        chartContainer = document.createElement('div');
+                        chartContainer.className = 'chart-canvas-container';
+                        canvasElement = document.createElement('canvas');
+                        canvasElement.className = 'chart-canvas';
+                        chartContainer.appendChild(canvasElement);
+                        preElement.parentNode.insertBefore(chartContainer, preElement);
+                    }
+                }
+                
+                if (canvasElement && canvasElement.tagName === 'CANVAS') {
+                    if(Chart.getChart(canvasElement)){
+                        Chart.getChart(canvasElement).destroy();
+                    }
+                    new Chart(canvasElement, chartConfig);
+                    preElement.setAttribute('data-chart-processed', 'true');
+                    preElement.style.display = 'none'; 
+                } else {
+                     console.warn('Could not find or create a suitable canvas for chart next to:', preElement);
+                }
+
+              } catch (e) {
+                console.error('Error parsing/rendering Chart.js JSON:', e, codeElement.textContent);
+                const errorP = document.createElement('p');
+                errorP.style.color = 'red';  errorP.style.fontSize = '12px';
+                errorP.textContent = 'Chart.js Error: ' + e.message.substring(0,100);
+                preElement.parentNode.insertBefore(errorP, preElement);
+                preElement.setAttribute('data-chart-processed', 'true'); 
+              }
+            } else {
+               preElement.setAttribute('data-chart-processed', 'true'); 
+            }
+          });
+        }
+
+        // Markmap: Find and render markmap divs
+        if (window.markmap && window.markmap.Markmap && window.markmap.transformer && window.d3) { // Ensure d3 is available
+          const { Markmap, transformer } = window.markmap;
+          document.querySelectorAll('div.markmap:not([data-processed="true"])').forEach((el) => {
+            const markdown = el.textContent || '';
+            if (markdown.trim()) {
+              try {
+                if (!el.querySelector('svg')) { 
+                    const { root } = transformer.transform(markdown);
+                    el.innerHTML = ''; 
+                    // Markmap.create will create and append SVG to `el` if no SVG element is passed as first arg.
+                    // Or, if you want to control SVG creation:
+                    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    el.appendChild(svgEl); // Append it first
+                    Markmap.create(svgEl, null, root); // Then pass it to Markmap
+                }
+                el.setAttribute('data-processed', 'true');
+              } catch (e) {
+                console.error('Error rendering Markmap:', e, markdown);
+                el.innerHTML = '<p style="color:red; font-size:12px;">Markmap Error: ' + e.message.substring(0,100) + '</p>';
+                el.setAttribute('data-processed', 'true'); 
+              }
+            } else {
+               el.setAttribute('data-processed', 'true');
+            }
+          });
+        } else if (window.markmap && !window.d3) {
+            console.warn("Markmap rendering skipped: D3.js not found.");
+        }
+      };
+    </script>
+  </body>
+</html>
